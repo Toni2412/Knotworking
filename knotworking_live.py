@@ -17,7 +17,7 @@ PORT = '/dev/ttyUSB0'
 BAUD = 115200
 
 # --- Trigger settings ---
-THRESHOLDS = [100, 100, 100, 100, 100, 100, 100]  # one per sensor
+THRESHOLDS = [1000, 1000, 1000, 1000, 1000, 1000, 1000]  # one per sensor
 GLOBAL_BREAK = 0.4          # seconds: min gap between any two triggers
 last_global_trigger = 0
 
