@@ -1,62 +1,66 @@
 #!/usr/bin/env python3
 # ---------------------------------------------------------------
 # Knotworking: TWO ESPs -> Serial -> OSC -> SuperCollider
+# Mit Velocity: die Signalstaerke steuert die Lautstaerke (amp).
 #
-# Reads piezo hits from two ESPs (Harfe + Netz) over stable
-# by-path device paths, so the assignment never swaps on reboot.
+# Harfe (oben)  -> /harfe <freq> <amp>   (angeschlagener Klang)
+# Netz  (unten) -> /netz  <freq> <amp>   (tiefer Drone/Bass)
+#
+# 7 Piezos pro ESP (GPIO 36,39,34,35,32,33,25 am ESP).
 # ---------------------------------------------------------------
 
 from pythonosc.udp_client import SimpleUDPClient
 import serial
 import time
 
-# --- OSC target: SuperCollider (sclang) on this Pi ---
+# --- OSC target: SuperCollider (sclang) auf diesem Pi ---
 client = SimpleUDPClient("127.0.0.1", 57120)
 
 # ================================================================
-#  ESP ASSIGNMENT  --  the important part
-# ----------------------------------------------------------------
-#  These stable paths are tied to the PHYSICAL USB socket,
-#  not to the ttyUSB number, so they survive reboots.
-#
-#  If Harfe and Netz come out swapped, just swap these two paths.
+#  ESP-ZUORDNUNG (stabile by-path Pfade, tauschen nie)
+#  Harfe = hcd.0 (oben),  Netz = hcd.1 (unten)
 # ================================================================
 HARFE_PORT = "/dev/serial/by-path/platform-xhci-hcd.0-usb-0:2:1.0-port0"  # oben
 NETZ_PORT  = "/dev/serial/by-path/platform-xhci-hcd.1-usb-0:2:1.0-port0"  # unten
 
 BAUD = 115200
 
-# --- Trigger settings (per ESP, 6 piezos each) ---
-THRESHOLDS = [100, 100, 100, 100, 100, 100]
-GLOBAL_BREAK = 0.4          # seconds between any two triggers (global)
+# --- Trigger settings (7 piezos pro ESP) ---
+THRESHOLDS = [100, 100, 100, 100, 100, 100, 100]
+GLOBAL_BREAK = 0.4          # Sekunden zwischen zwei Ausloesungen (global)
 last_global_trigger = 0
 
 # ================================================================
-#  SOUND MAPPING
-#  Harfe piezos 0-5  and  Netz piezos 0-5
-#  Adjust the OSC messages to taste later.
+#  VELOCITY: Signalstaerke -> Lautstaerke (wie im pygame-Code)
+#  Signal 100..1000  ->  amp 0.1..1.0
 # ================================================================
+def signal_to_amp(signal):
+    strength = max(100, min(signal, 1000))
+    amp = 0.1 + ((strength - 100) / 900) * 0.9
+    return round(amp, 3)
+
+# ================================================================
+#  FREQUENZEN
+#  Harfe: deine 7 Pentatonik-Werte
+#  Netz:  tiefere, ergaenzende Toene (Bass-Bereich)
+# ================================================================
+HARFE_FREQS = [261.63, 196.00, 293.66, 329.63, 392.00, 440.00, 220.00]
+NETZ_FREQS  = [ 65.41,  55.00,  73.42,  82.41,  98.00, 110.00,  49.00]  # ~2 Oktaven tiefer
+
 def harfe_sound(i, signal):
-    if   i == 0: client.send_message("/tone", 440)
-    elif i == 1: client.send_message("/bass", 1)
-    elif i == 2: client.send_message("/pad", 1)
-    elif i == 3: client.send_message("/tone", 660)
-    elif i == 4: client.send_message("/noise", 1)
-    elif i == 5: client.send_message("/kick", 1)
-    print(f"HARFE piezo {i} -> Sound! (Signal: {signal})")
+    amp = signal_to_amp(signal)
+    freq = HARFE_FREQS[i] if i < len(HARFE_FREQS) else 440
+    client.send_message("/harfe", [freq, amp])
+    print(f"HARFE piezo {i} -> {freq}Hz  amp {amp}  (Signal {signal})")
 
 def netz_sound(i, signal):
-    if   i == 0: client.send_message("/tone", 220)
-    elif i == 1: client.send_message("/tone", 330)
-    elif i == 2: client.send_message("/pad", 1)
-    elif i == 3: client.send_message("/bass", 1)
-    elif i == 4: client.send_message("/kick", 1)
-    elif i == 5: client.send_message("/noise", 1)
-    print(f"NETZ  piezo {i} -> Sound! (Signal: {signal})")
+    amp = signal_to_amp(signal)
+    freq = NETZ_FREQS[i] if i < len(NETZ_FREQS) else 110
+    client.send_message("/netz", [freq, amp])
+    print(f"NETZ  piezo {i} -> {freq}Hz  amp {amp}  (Signal {signal})")
 
 
 def open_port(path, name):
-    """Open a serial port, with a clear message if it fails."""
     try:
         s = serial.Serial(path, BAUD, timeout=0.01)
         print(f"[OK] {name} verbunden: {path}")
@@ -66,34 +70,28 @@ def open_port(path, name):
         return None
 
 
-def read_esp(ser, thresholds, sound_fn):
-    """Read one line from an ESP and trigger sounds. Returns True if a sound fired."""
+def read_esp(ser, sound_fn):
     global last_global_trigger
     if ser is None:
-        return False
-
+        return
     line = ser.readline().decode('utf-8', errors='ignore').strip()
     if not line or ',' not in line:
-        return False
-
+        return
     try:
         vals = [int(v) for v in line.split(',')]
     except ValueError:
-        return False
-
+        return
     now = time.time()
     if (now - last_global_trigger) < GLOBAL_BREAK:
-        return False
-
+        return
     for i in range(len(vals)):
-        if i < len(thresholds) and vals[i] > thresholds[i]:
+        if i < len(THRESHOLDS) and vals[i] > THRESHOLDS[i]:
             sound_fn(i, vals[i])
             last_global_trigger = now
-            return True
-    return False
+            return
 
 
-# --- Open both ESPs ---
+# --- Beide ESPs oeffnen ---
 harfe = open_port(HARFE_PORT, "HARFE (oben)")
 netz  = open_port(NETZ_PORT,  "NETZ  (unten)")
 
@@ -101,14 +99,12 @@ if harfe is None and netz is None:
     print("Kein ESP gefunden - Abbruch.")
     raise SystemExit(1)
 
-print("\nKnotworking laeuft! Klopf ans Netz oder die Harfe. Strg-C zum Stoppen.\n")
+print("\nKnotworking laeuft! Klopf an Harfe oder Netz. Strg-C zum Stoppen.\n")
 
 try:
     while True:
-        # Read both ESPs each loop; whichever has data triggers.
-        read_esp(harfe, THRESHOLDS, harfe_sound)
-        read_esp(netz,  THRESHOLDS, netz_sound)
-
+        read_esp(harfe, harfe_sound)
+        read_esp(netz,  netz_sound)
 except KeyboardInterrupt:
     print("\nGestoppt.")
 finally:
