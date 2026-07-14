@@ -78,6 +78,8 @@ def netz_sound(i, signal):
 def open_port(path, name):
     try:
         s = serial.Serial(path, BAUD, timeout=0.01)
+        time.sleep(0.2)               # kurz warten bis Port bereit
+        s.reset_input_buffer()        # aufgestauten Alt-Datenmuell wegwerfen
         print(f"[OK] {name} verbunden: {path}")
         return s
     except Exception as e:
