@@ -1,7 +1,6 @@
 // ================================================================
 //  KNOTWORKING - Erweiterung fuer Harfe + Netz
 //  Mit load("...Soundscape_addition.scd"); laden.
-//  Alles in EINEM Block, damit load() es akzeptiert.
 // ================================================================
 (
 // ---------- HARFE: der angeschlagene, organische Ton ----------
@@ -46,9 +45,6 @@ SynthDef(\netz, { |freq = 110, amp = 0.5|
 }).add;
 
 // ---------- OSC-HANDLER ----------
-// Kurz warten, bis die SynthDefs auf dem Server sind, dann Handler bauen.
-s.sync;
-
 OSCdef(\harfeTrig, { |msg|
     Synth(\harfe, [\freq, msg[1], \amp, msg[2]]);
 }, "/harfe");
