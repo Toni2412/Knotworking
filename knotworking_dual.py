@@ -6,6 +6,10 @@
 # Harfe (oben)  -> /harfe <freq> <amp>   (angeschlagener Klang)
 # Netz  (unten) -> /netz  <freq> <amp>   (tiefer Drone/Bass)
 #
+# ZWEI GETRENNTE TIMER:
+#   - Harfe und Netz koennen sich UEBERLAGERN
+#   - Harfe blockiert nur Harfe, Netz blockiert nur Netz
+#
 # 7 Piezos pro ESP (GPIO 36,39,34,35,32,33,25 am ESP).
 # ---------------------------------------------------------------
 
@@ -26,9 +30,20 @@ NETZ_PORT  = "/dev/serial/by-path/platform-xhci-hcd.1-usb-0:2:1.0-port0"  # unte
 BAUD = 115200
 
 # --- Trigger settings (7 piezos pro ESP) ---
-THRESHOLDS = [100, 100, 100, 100, 100, 100, 100]
-GLOBAL_BREAK = 0.4          # Sekunden zwischen zwei Ausloesungen (global)
-last_global_trigger = 0
+HARFE_THRESHOLDS = [75, 75, 75, 75, 75, 75, 75]   # Harfe: empfindlicher
+NETZ_THRESHOLDS  = [100, 100, 100, 100, 100, 100, 100]  # Netz: normal
+
+# ================================================================
+#  ZWEI GETRENNTE TIMER (in Sekunden)
+#  Harfe schnell (0.075 = 75 ms), Netz traeger (0.4 = 400 ms).
+#  Jeder ESP hat seinen eigenen "zuletzt ausgeloest"-Zeitpunkt,
+#  deshalb blockieren sie sich NICHT gegenseitig.
+# ================================================================
+HARFE_BREAK = 0.4
+NETZ_BREAK  = 0.4
+
+last_harfe = 0
+last_netz  = 0
 
 # ================================================================
 #  VELOCITY: Signalstaerke -> Lautstaerke (wie im pygame-Code)
@@ -70,8 +85,8 @@ def open_port(path, name):
         return None
 
 
-def read_esp(ser, sound_fn):
-    global last_global_trigger
+def read_harfe(ser):
+    global last_harfe
     if ser is None:
         return
     line = ser.readline().decode('utf-8', errors='ignore').strip()
@@ -82,12 +97,33 @@ def read_esp(ser, sound_fn):
     except ValueError:
         return
     now = time.time()
-    if (now - last_global_trigger) < GLOBAL_BREAK:
+    if (now - last_harfe) < HARFE_BREAK:
         return
     for i in range(len(vals)):
-        if i < len(THRESHOLDS) and vals[i] > THRESHOLDS[i]:
-            sound_fn(i, vals[i])
-            last_global_trigger = now
+        if i < len(HARFE_THRESHOLDS) and vals[i] > HARFE_THRESHOLDS[i]:
+            harfe_sound(i, vals[i])
+            last_harfe = now
+            return
+
+
+def read_netz(ser):
+    global last_netz
+    if ser is None:
+        return
+    line = ser.readline().decode('utf-8', errors='ignore').strip()
+    if not line or ',' not in line:
+        return
+    try:
+        vals = [int(v) for v in line.split(',')]
+    except ValueError:
+        return
+    now = time.time()
+    if (now - last_netz) < NETZ_BREAK:
+        return
+    for i in range(len(vals)):
+        if i < len(NETZ_THRESHOLDS) and vals[i] > NETZ_THRESHOLDS[i]:
+            netz_sound(i, vals[i])
+            last_netz = now
             return
 
 
@@ -103,8 +139,8 @@ print("\nKnotworking laeuft! Klopf an Harfe oder Netz. Strg-C zum Stoppen.\n")
 
 try:
     while True:
-        read_esp(harfe, harfe_sound)
-        read_esp(netz,  netz_sound)
+        read_harfe(harfe)
+        read_netz(netz)
 except KeyboardInterrupt:
     print("\nGestoppt.")
 finally:
