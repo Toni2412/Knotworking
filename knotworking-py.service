@@ -1,0 +1,23 @@
+[Unit]
+Description=Knotworking Python (Piezo -> OSC)
+# Erst starten, nachdem der SuperCollider-Service laeuft
+After=knotworking-sc.service
+Requires=knotworking-sc.service
+
+[Service]
+Type=simple
+User=knotworking
+WorkingDirectory=/home/knotworking/Knotworking
+
+# Wichtig: warten, bis SuperCollider die Synths geladen hat,
+# BEVOR Python startet (sonst OSC ins Leere).
+ExecStartPre=/bin/sleep 20
+
+ExecStart=/usr/bin/python3 /home/knotworking/Knotworking/knotworking_dual.py
+
+# Bei Absturz automatisch neu starten
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

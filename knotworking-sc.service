@@ -1,0 +1,22 @@
+[Unit]
+Description=Knotworking SuperCollider (sclang + startup.scd)
+After=sound.target network.target
+
+[Service]
+Type=simple
+User=knotworking
+WorkingDirectory=/home/knotworking/Knotworking
+
+# Umgebung: headless (kein Display) und Audio-Zugang
+Environment=QT_QPA_PLATFORM=offscreen
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+
+# sclang startet und arbeitet startup.scd ab (bootet Server, laedt Soundscapes)
+ExecStart=/usr/bin/sclang /home/knotworking/Knotworking/startup.scd
+
+# Bei Absturz automatisch neu starten
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
