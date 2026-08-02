@@ -1,24 +1,33 @@
 // ================================================================
-//  KNOTWORKING - Autostart-Skript fuer SuperCollider
+//  KNOTWORKING - Autostart-Skript fuer SuperCollider (robust)
 //  Wird beim Booten automatisch von sclang abgearbeitet.
-//  Ersetzt das manuelle Tippen von:
-//    s.boot; -> warten -> load(Soundscape_2) -> load(Soundscape_addition)
+//
+//  Nutzt eine Routine mit s.sync, damit JEDER Schritt wirklich
+//  abgeschlossen ist, bevor der naechste kommt:
+//    booten -> warten -> Soundscape_2 laden -> warten
+//           -> Soundscape_addition laden -> fertig
 // ================================================================
 
-// Audio-Konfiguration (wie in Soundscape_2 - kein Mikrofon-Input noetig)
 s.options.numInputBusChannels = 0;
 
-// Server booten UND warten bis er wirklich bereit ist,
-// DANN erst die Soundscapes laden (das ist dein "auf server ready warten").
 s.waitForBoot({
+    // Wir laufen hier schon in einer Routine (waitForBoot),
+    // deshalb ist s.sync erlaubt und laesst uns sauber warten.
 
     // --- Lautstaerke (spaeter fuer die Ausstellung anpassen) ---
-    // Zeile einkommentieren und Wert setzen, wenn noetig:
     // s.volume.volume = 6;
 
-    // --- Deine Klaenge laden ---
+    s.sync;  // sicherstellen, dass der Server wirklich bereit ist
+
+    // Erste Datei laden und warten, bis ihre SynthDefs/Handler da sind
     load("/home/knotworking/Knotworking/Soundscape_2.scd");
+    s.sync;
+    1.wait;  // eine Sekunde Puffer, damit alles registriert ist
+
+    // Zweite Datei laden
     load("/home/knotworking/Knotworking/Soundscape_addition.scd");
+    s.sync;
+    1.wait;
 
     "=== KNOTWORKING AUTOSTART FERTIG ===".postln;
 });
