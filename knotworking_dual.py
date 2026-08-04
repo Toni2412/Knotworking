@@ -75,37 +75,55 @@ def netz_sound(i, signal):
     print(f"NETZ  piezo {i} -> {freq}Hz  amp {amp}  (Signal {signal})")
 
 
+def _try_open_once(path):
+    """Oeffnet den Port einmal (ohne Reset via DTR/RTS) und prueft,
+    ob Daten fliessen. Gibt (serial_obj, got_data) zurueck."""
+    s = serial.Serial()
+    s.port = path
+    s.baudrate = BAUD
+    s.timeout = 0.01
+    s.dtr = False
+    s.rts = False
+    s.open()
+
+    time.sleep(0.5)
+    s.reset_input_buffer()
+
+    got_data = False
+    for _ in range(30):
+        line = s.readline().decode('utf-8', errors='ignore').strip()
+        if line and ',' in line:
+            got_data = True
+            break
+        time.sleep(0.05)
+
+    s.reset_input_buffer()
+    return s, got_data
+
+
 def open_port(path, name):
+    """Oeffnet den ESP-Port robust: Wenn beim ersten Versuch keine
+    Daten kommen, wird der Port geschlossen und neu geoeffnet (bis 6x).
+    Das nutzt das beobachtete 'beim zweiten Mal geht's'-Verhalten aus."""
+    for attempt in range(1, 7):
+        try:
+            s, got_data = _try_open_once(path)
+            if got_data:
+                print(f"[OK] {name} verbunden und sendet Daten (Versuch {attempt}): {path}")
+                return s
+            else:
+                # Keine Daten -> Port schliessen und neu versuchen
+                print(f"[..] {name} Versuch {attempt}: noch keine Daten, neuer Versuch...")
+                s.close()
+                time.sleep(1.0)
+        except Exception as e:
+            print(f"[..] {name} Versuch {attempt} fehlgeschlagen: {e}")
+            time.sleep(1.0)
+
+    # Nach allen Versuchen: letzten Versuch trotzdem offen lassen (liest evtl. spaeter)
     try:
-        # WICHTIG: Port-Objekt erst OHNE zu oeffnen anlegen, damit wir
-        # DTR/RTS deaktivieren koennen, BEVOR verbunden wird. Das
-        # verhindert den ESP-RESET beim Oeffnen (der die Datenpause
-        # beim Booten verursacht hat).
-        s = serial.Serial()
-        s.port = path
-        s.baudrate = BAUD
-        s.timeout = 0.01
-        s.dtr = False   # kein Reset ueber DTR
-        s.rts = False   # kein Reset ueber RTS
-        s.open()
-
-        time.sleep(0.5)               # kurz warten bis Port bereit
-        s.reset_input_buffer()        # Puffer frisch
-
-        # Kurz pruefen, ob Daten fliessen (nur zur Info im Log):
-        got_data = False
-        for _ in range(30):
-            line = s.readline().decode('utf-8', errors='ignore').strip()
-            if line and ',' in line:
-                got_data = True
-                break
-            time.sleep(0.05)
-
-        if got_data:
-            print(f"[OK] {name} verbunden und sendet Daten: {path}")
-        else:
-            print(f"[WARN] {name} verbunden, aber noch keine Daten: {path}")
-        s.reset_input_buffer()
+        s, _ = _try_open_once(path)
+        print(f"[WARN] {name} verbunden, aber sendet noch keine Daten nach 6 Versuchen: {path}")
         return s
     except Exception as e:
         print(f"[FEHLER] {name} konnte nicht geoeffnet werden: {e}")
