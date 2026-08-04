@@ -1,7 +1,7 @@
 [Unit]
 Description=Knotworking SuperCollider (sclang + startup.scd)
-# Warten bis Netzwerk und Sound-System initialisiert sind
-After=sound.target network.target multi-user.target
+# NUR nach sound/network - NICHT multi-user.target (das erzeugt einen Zyklus!)
+After=sound.target network.target
 Wants=sound.target
 
 [Service]
@@ -12,8 +12,7 @@ WorkingDirectory=/home/knotworking/Knotworking
 Environment=QT_QPA_PLATFORM=offscreen
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 
-# WICHTIG: beim Booten warten, bis die USB-Audiokarte sicher bereit ist.
-# Beim manuellen Start war sie laengst da - beim Booten ist es ein Wettrennen.
+# Beim Booten warten, bis die USB-Audiokarte sicher bereit ist
 ExecStartPre=/bin/sleep 30
 
 ExecStart=/usr/bin/sclang /home/knotworking/Knotworking/startup.scd

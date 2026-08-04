@@ -1,18 +1,19 @@
 [Unit]
 Description=Knotworking Python (Piezo -> OSC)
+# Wants statt Requires: robuster (Python startet auch wenn SC-Timing zickt)
 After=knotworking-sc.service
-Requires=knotworking-sc.service
+Wants=knotworking-sc.service
 
 [Service]
 Type=simple
 User=knotworking
 WorkingDirectory=/home/knotworking/Knotworking
 
-# Warten, bis SuperCollider (das selbst 30s wartet + ~20s Hochfahren)
-# vollstaendig bereit ist, BEVOR Python startet.
+# Warten, bis SuperCollider bereit ist, bevor Python startet
 ExecStartPre=/bin/sleep 55
 
-ExecStart=/usr/bin/python3 /home/knotworking/Knotworking/knotworking_dual.py
+# -u = unbuffered: Python-Ausgaben erscheinen sofort im Log (fuer Debugging)
+ExecStart=/usr/bin/python3 -u /home/knotworking/Knotworking/knotworking_dual.py
 
 Restart=on-failure
 RestartSec=5
