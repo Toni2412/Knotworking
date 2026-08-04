@@ -77,27 +77,35 @@ def netz_sound(i, signal):
 
 def open_port(path, name):
     try:
-        s = serial.Serial(path, BAUD, timeout=0.01)
-        # Der ESP macht beim Oeffnen des Ports einen RESET (DTR/RTS).
-        # Danach braucht er ein paar Sekunden, bis er wieder sauber sendet.
-        # Deshalb: laenger warten, DANN Puffer leeren.
-        time.sleep(3.0)               # ESP-Reset abklingen lassen
-        s.reset_input_buffer()        # alten Muell (Reset-Ausgaben) wegwerfen
+        # WICHTIG: Port-Objekt erst OHNE zu oeffnen anlegen, damit wir
+        # DTR/RTS deaktivieren koennen, BEVOR verbunden wird. Das
+        # verhindert den ESP-RESET beim Oeffnen (der die Datenpause
+        # beim Booten verursacht hat).
+        s = serial.Serial()
+        s.port = path
+        s.baudrate = BAUD
+        s.timeout = 0.01
+        s.dtr = False   # kein Reset ueber DTR
+        s.rts = False   # kein Reset ueber RTS
+        s.open()
 
-        # Aktiv warten, bis wirklich saubere Daten kommen (max. 10 Versuche):
+        time.sleep(0.5)               # kurz warten bis Port bereit
+        s.reset_input_buffer()        # Puffer frisch
+
+        # Kurz pruefen, ob Daten fliessen (nur zur Info im Log):
         got_data = False
-        for _ in range(50):
+        for _ in range(30):
             line = s.readline().decode('utf-8', errors='ignore').strip()
             if line and ',' in line:
                 got_data = True
                 break
-            time.sleep(0.1)
+            time.sleep(0.05)
 
         if got_data:
             print(f"[OK] {name} verbunden und sendet Daten: {path}")
         else:
             print(f"[WARN] {name} verbunden, aber noch keine Daten: {path}")
-        s.reset_input_buffer()        # nochmal frisch fuer den Normalbetrieb
+        s.reset_input_buffer()
         return s
     except Exception as e:
         print(f"[FEHLER] {name} konnte nicht geoeffnet werden: {e}")
