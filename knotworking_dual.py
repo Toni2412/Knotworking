@@ -78,9 +78,26 @@ def netz_sound(i, signal):
 def open_port(path, name):
     try:
         s = serial.Serial(path, BAUD, timeout=0.01)
-        time.sleep(0.2)               # kurz warten bis Port bereit
-        s.reset_input_buffer()        # aufgestauten Alt-Datenmuell wegwerfen
-        print(f"[OK] {name} verbunden: {path}")
+        # Der ESP macht beim Oeffnen des Ports einen RESET (DTR/RTS).
+        # Danach braucht er ein paar Sekunden, bis er wieder sauber sendet.
+        # Deshalb: laenger warten, DANN Puffer leeren.
+        time.sleep(3.0)               # ESP-Reset abklingen lassen
+        s.reset_input_buffer()        # alten Muell (Reset-Ausgaben) wegwerfen
+
+        # Aktiv warten, bis wirklich saubere Daten kommen (max. 10 Versuche):
+        got_data = False
+        for _ in range(50):
+            line = s.readline().decode('utf-8', errors='ignore').strip()
+            if line and ',' in line:
+                got_data = True
+                break
+            time.sleep(0.1)
+
+        if got_data:
+            print(f"[OK] {name} verbunden und sendet Daten: {path}")
+        else:
+            print(f"[WARN] {name} verbunden, aber noch keine Daten: {path}")
+        s.reset_input_buffer()        # nochmal frisch fuer den Normalbetrieb
         return s
     except Exception as e:
         print(f"[FEHLER] {name} konnte nicht geoeffnet werden: {e}")
