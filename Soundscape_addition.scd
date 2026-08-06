@@ -44,14 +44,43 @@ SynthDef(\netz, { |freq = 110, amp = 0.5|
     Out.ar(0, sig);
 }).add;
 
-// ---------- OSC-HANDLER ----------
+// ================================================================
+//  GLOBALER MUTE-ZUSTAND
+//  ~muted steuert, ob Toene erzeugt werden. Die OSC-Handler /harfe
+//  und /netz pruefen diesen Zustand.
+// ================================================================
+~muted = false;
+
+// ---------- OSC-HANDLER fuer Toene ----------
+// Spielen nur, wenn NICHT gemutet.
 OSCdef(\harfeTrig, { |msg|
-    Synth(\harfe, [\freq, msg[1], \amp, msg[2]]);
+    if(~muted.not) {
+        Synth(\harfe, [\freq, msg[1], \amp, msg[2]]);
+    };
 }, "/harfe");
 
 OSCdef(\netzTrig, { |msg|
-    Synth(\netz, [\freq, msg[1], \amp, msg[2]]);
+    if(~muted.not) {
+        Synth(\netz, [\freq, msg[1], \amp, msg[2]]);
+    };
 }, "/netz");
 
-"=== HARFE + NETZ bereit ===".postln;
+// ================================================================
+//  STEUER-HANDLER fuer die Website
+//  /mute 1  -> alles aus (stumm)
+//  /mute 0  -> alles an
+// ================================================================
+OSCdef(\muteControl, { |msg|
+    var val = msg[1];
+    if(val == 1) {
+        ~muted = true;
+        s.freeAll;                    // laufende Toene sofort stoppen
+        "MUTE: Installation AUS".postln;
+    } {
+        ~muted = false;
+        "MUTE: Installation AN".postln;
+    };
+}, "/mute");
+
+"=== HARFE + NETZ + MUTE bereit ===".postln;
 )
